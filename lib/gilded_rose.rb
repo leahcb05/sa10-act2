@@ -1,4 +1,14 @@
 class GildedRose
+  def initialize(item)
+    @item = item
+  end
+
+  def tick
+    @item.update_quality
+  end
+end
+
+class Item
   attr_reader :name, :days_remaining, :quality
 
   def initialize(name:, days_remaining:, quality:)
@@ -7,49 +17,96 @@ class GildedRose
     @quality = quality
   end
 
-  def tick
-    if @name != "Aged Brie" and @name != "Backstage passes to a TAFKAL80ETC concert"
-      if @quality > 0
-        if @name != "Sulfuras, Hand of Ragnaros"
-          @quality = @quality - 1
-        end
-      end
+  def update_quality
+    decrease_sell_in
+    quality_updater.update_quality
+  end
+
+  private
+
+  def decrease_sell_in
+    @days_remaining -= 1 unless sulfuras?
+  end
+
+  def quality_updater
+    QualityUpdaterFactory.for_item(self)
+  end
+
+  def sulfuras?
+    @name == "Sulfuras, Hand of Ragnaros"
+  end
+end
+
+class QualityUpdaterFactory
+  def self.for_item(item)
+    case item.name
+    when "Aged Brie"
+      AgedBrieQualityUpdater.new(item)
+    when "Backstage passes to a TAFKAL80ETC concert"
+      BackstagePassQualityUpdater.new(item)
+    when "Sulfuras, Hand of Ragnaros"
+      SulfurasQualityUpdater.new(item)
     else
-      if @quality < 50
-        @quality = @quality + 1
-        if @name == "Backstage passes to a TAFKAL80ETC concert"
-          if @days_remaining < 11
-            if @quality < 50
-              @quality = @quality + 1
-            end
-          end
-          if @days_remaining < 6
-            if @quality < 50
-              @quality = @quality + 1
-            end
-          end
-        end
-      end
+      NormalItemQualityUpdater.new(item)
     end
-    if @name != "Sulfuras, Hand of Ragnaros"
-      @days_remaining = @days_remaining - 1
+  end
+end
+
+class QualityUpdater
+  def initialize(item)
+    @item = item
+  end
+
+  def update_quality
+    raise NotImplementedError, "Subclasses must implement update_quality method"
+  end
+end
+
+class AgedBrieQualityUpdater < QualityUpdater
+  def update_quality
+    increment_quality if @item.quality < 50
+  end
+
+  private
+
+  def increment_quality
+    @item.quality += 1
+  end
+end
+
+class BackstagePassQualityUpdater < QualityUpdater
+  def update_quality
+    case
+    when @item.days_remaining > 10 then increment_quality_by(1)
+    when @item.days_remaining.between?(6, 10) then increment_quality_by(2)
+    when @item.days_remaining.between?(1, 5) then increment_quality_by(3)
+    else @item.quality = 0
     end
-    if @days_remaining < 0
-      if @name != "Aged Brie"
-        if @name != "Backstage passes to a TAFKAL80ETC concert"
-          if @quality > 0
-            if @name != "Sulfuras, Hand of Ragnaros"
-              @quality = @quality - 1
-            end
-          end
-        else
-          @quality = @quality - @quality
-        end
-      else
-        if @quality < 50
-          @quality = @quality + 1
-        end
-      end
-    end
+  end
+
+  private
+
+  def increment_quality_by(value)
+    @item.quality += value
+    @item.quality = 50 if @item.quality > 50
+  end
+end
+
+class SulfurasQualityUpdater < QualityUpdater
+  def update_quality
+    # Sulfuras quality never changes
+  end
+end
+
+class NormalItemQualityUpdater < QualityUpdater
+  def update_quality
+    decrease_quality
+  end
+
+  private
+
+  def decrease_quality
+    @item.quality -= 1 if @item.quality > 0
+    @item.quality -= 1 if @item.days_remaining <= 0 && @item.quality > 0
   end
 end
